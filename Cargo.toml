@@ -1,0 +1,141 @@
+[package]
+name = "coreutils"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/microsoft/coreutils"
+rust-version = "1.88.0"
+version = "2026.5.29"
+publish = false
+
+[profile.release]
+codegen-units = 1           # reduces binary size by ~2%
+debug = "full"              # No one needs an undebuggable release binary
+lto = true                  # reduces binary size by ~14%
+opt-level = "s"             # reduces binary size by ~25%
+panic = "abort"             # reduces binary size by ~50% in combination with -Zbuild-std-features=panic_immediate_abort
+split-debuginfo = "packed"  # generates a separate *.dwp/*.dSYM so the binary can get stripped
+strip = "symbols"           # See split-debuginfo - allows us to drop the size by ~65%
+incremental = true          # Improves re-compile times
+
+[patch.crates-io]
+uucore = { path = "deps/coreutils/src/uucore" }
+uucore_procs = { path = "deps/coreutils/src/uucore_procs" }
+
+[dependencies]
+clap = { version = "4.5", features = ["wrap_help", "cargo", "color"] }
+itertools = "0.14"
+phf = "0.13"
+textwrap = { version = "0.16", features = ["terminal_size"] }
+uucore = { path = "deps/coreutils/src/uucore" }
+
+# coreutils feat_common_core
+# Removed:
+# * dd
+# * dir (conflicts with a DOS command)
+# * dircolors
+# * expand (conflicts with a DOS command)
+# * more (conflicts with a DOS command; the implementation is also not great right now)
+# * paste (conflicts with a DOS command)
+# * shred
+# * vdir (not particularly widely used)
+base32 = { package = "uu_base32", path = "deps/coreutils/src/uu/base32" }
+base64 = { package = "uu_base64", path = "deps/coreutils/src/uu/base64" }
+basename = { package = "uu_basename", path = "deps/coreutils/src/uu/basename" }
+basenc = { package = "uu_basenc", path = "deps/coreutils/src/uu/basenc" }
+cat = { package = "uu_cat", path = "deps/coreutils/src/uu/cat" }
+cksum = { package = "uu_cksum", path = "deps/coreutils/src/uu/cksum" }
+b2sum = { package = "uu_b2sum", path = "deps/coreutils/src/uu/b2sum" }
+md5sum = { package = "uu_md5sum", path = "deps/coreutils/src/uu/md5sum" }
+sha1sum = { package = "uu_sha1sum", path = "deps/coreutils/src/uu/sha1sum" }
+sha224sum = { package = "uu_sha224sum", path = "deps/coreutils/src/uu/sha224sum" }
+sha256sum = { package = "uu_sha256sum", path = "deps/coreutils/src/uu/sha256sum" }
+sha384sum = { package = "uu_sha384sum", path = "deps/coreutils/src/uu/sha384sum" }
+sha512sum = { package = "uu_sha512sum", path = "deps/coreutils/src/uu/sha512sum" }
+comm = { package = "uu_comm", path = "deps/coreutils/src/uu/comm" }
+cp = { package = "uu_cp", path = "deps/coreutils/src/uu/cp" }
+csplit = { package = "uu_csplit", path = "deps/coreutils/src/uu/csplit" }
+cut = { package = "uu_cut", path = "deps/coreutils/src/uu/cut" }
+date = { package = "uu_date", path = "deps/coreutils/src/uu/date" }
+df = { package = "uu_df", path = "deps/coreutils/src/uu/df" }
+dirname = { package = "uu_dirname", path = "deps/coreutils/src/uu/dirname" }
+du = { package = "uu_du", path = "deps/coreutils/src/uu/du" }
+echo = { package = "uu_echo", path = "deps/coreutils/src/uu/echo" }
+env = { package = "uu_env", path = "deps/coreutils/src/uu/env" }
+expr = { package = "uu_expr", path = "deps/coreutils/src/uu/expr" }
+factor = { package = "uu_factor", path = "deps/coreutils/src/uu/factor" }
+false = { package = "uu_false", path = "deps/coreutils/src/uu/false" }
+fmt = { package = "uu_fmt", path = "deps/coreutils/src/uu/fmt" }
+fold = { package = "uu_fold", path = "deps/coreutils/src/uu/fold" }
+head = { package = "uu_head", path = "deps/coreutils/src/uu/head" }
+join = { package = "uu_join", path = "deps/coreutils/src/uu/join" }
+link = { package = "uu_link", path = "deps/coreutils/src/uu/link" }
+ln = { package = "uu_ln", path = "deps/coreutils/src/uu/ln" }
+ls = { package = "uu_ls", path = "deps/coreutils/src/uu/ls" }
+mkdir = { package = "uu_mkdir", path = "deps/coreutils/src/uu/mkdir" }
+mktemp = { package = "uu_mktemp", path = "deps/coreutils/src/uu/mktemp" }
+mv = { package = "uu_mv", path = "deps/coreutils/src/uu/mv" }
+nl = { package = "uu_nl", path = "deps/coreutils/src/uu/nl" }
+numfmt = { package = "uu_numfmt", path = "deps/coreutils/src/uu/numfmt" }
+od = { package = "uu_od", path = "deps/coreutils/src/uu/od" }
+pathchk = { package = "uu_pathchk", path = "deps/coreutils/src/uu/pathchk" }
+pr = { package = "uu_pr", path = "deps/coreutils/src/uu/pr" }
+printenv = { package = "uu_printenv", path = "deps/coreutils/src/uu/printenv" }
+printf = { package = "uu_printf", path = "deps/coreutils/src/uu/printf" }
+ptx = { package = "uu_ptx", path = "deps/coreutils/src/uu/ptx" }
+pwd = { package = "uu_pwd", path = "deps/coreutils/src/uu/pwd" }
+readlink = { package = "uu_readlink", path = "deps/coreutils/src/uu/readlink" }
+realpath = { package = "uu_realpath", path = "deps/coreutils/src/uu/realpath" }
+rm = { package = "uu_rm", path = "deps/coreutils/src/uu/rm" }
+rmdir = { package = "uu_rmdir", path = "deps/coreutils/src/uu/rmdir" }
+seq = { package = "uu_seq", path = "deps/coreutils/src/uu/seq" }
+shuf = { package = "uu_shuf", path = "deps/coreutils/src/uu/shuf" }
+sleep = { package = "uu_sleep", path = "deps/coreutils/src/uu/sleep" }
+sort = { package = "uu_sort", path = "deps/coreutils/src/uu/sort" }
+split = { package = "uu_split", path = "deps/coreutils/src/uu/split" }
+sum = { package = "uu_sum", path = "deps/coreutils/src/uu/sum" }
+tac = { package = "uu_tac", path = "deps/coreutils/src/uu/tac" }
+tail = { package = "uu_tail", path = "deps/coreutils/src/uu/tail" }
+tee = { package = "uu_tee", path = "deps/coreutils/src/uu/tee" }
+uu_test = { package = "uu_test", path = "deps/coreutils/src/uu/test" }
+touch = { package = "uu_touch", path = "deps/coreutils/src/uu/touch" }
+tr = { package = "uu_tr", path = "deps/coreutils/src/uu/tr" }
+true = { package = "uu_true", path = "deps/coreutils/src/uu/true" }
+truncate = { package = "uu_truncate", path = "deps/coreutils/src/uu/truncate" }
+tsort = { package = "uu_tsort", path = "deps/coreutils/src/uu/tsort" }
+unexpand = { package = "uu_unexpand", path = "deps/coreutils/src/uu/unexpand" }
+uniq = { package = "uu_uniq", path = "deps/coreutils/src/uu/uniq" }
+unlink = { package = "uu_unlink", path = "deps/coreutils/src/uu/unlink" }
+wc = { package = "uu_wc", path = "deps/coreutils/src/uu/wc" }
+yes = { package = "uu_yes", path = "deps/coreutils/src/uu/yes" }
+
+# coreutils feat_Tier1
+# Removed:
+# * sync
+# * uname
+# * whoami
+arch = { package = "uu_arch", path = "deps/coreutils/src/uu/arch" }
+hostname = { package = "uu_hostname", path = "deps/coreutils/src/uu/hostname" }
+nproc = { package = "uu_nproc", path = "deps/coreutils/src/uu/nproc" }
+
+# coreutils feat_os_windows
+stat = { package = "uu_stat", path = "deps/coreutils/src/uu/stat" }
+uptime = { package = "uu_uptime", path = "deps/coreutils/src/uu/uptime" }
+
+# Extras for our version
+findutils = { package = "findutils", path = "deps/findutils" }
+grep = { package = "uu_grep", path = "deps/grep" }
+ntfind = { package = "find", path = "deps/ntfind" }
+
+# For registry access in main.rs
+[dependencies.windows-sys]
+version = "*"
+features = [
+    "Win32_System_Console",
+    "Win32_System_Registry",
+]
+
+[build-dependencies]
+cc = "1"
+phf_codegen = "0.13"
+regex = "1"
+winresource = { version = "0.1", default-features = false }

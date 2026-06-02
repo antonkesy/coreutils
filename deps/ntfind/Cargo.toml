@@ -1,0 +1,20 @@
+[package]
+name = "find"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/microsoft/coreutils"
+rust-version = "1.88.0"
+version = "0.0.0"
+publish = false
+
+[dependencies.windows-sys]
+version = "*"
+features = [
+    "Win32_Globalization",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Console",
+    "Win32_System_Environment",
+    "Win32_System_IO",
+    "Win32_System_Threading",
+]

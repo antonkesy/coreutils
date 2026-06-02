@@ -1,0 +1,326 @@
+// Copyright (c) uutils developers, Microsoft Corporation.
+// Licensed under the MIT License.
+//
+// NOTE: This file is derived from uutils/coreutils' original main.rs and includes
+// Microsoft-authored changes, which Microsoft makes available to uutils
+// under the uutils MIT License for upstream incorporation. See NOTICE.md.
+
+mod nthelpers;
+
+use std::borrow::Cow;
+use std::cmp;
+use std::ffi::{OsStr, OsString};
+use std::io::{self, Write as _, stderr};
+use std::path::{Path, PathBuf};
+use std::process;
+
+use clap::Command;
+use itertools::Itertools as _;
+use uucore::display::Quotable as _;
+use uucore::{Args, error::strip_errno, locale};
+use windows_sys::Win32::Globalization::CP_UTF8;
+use windows_sys::Win32::System::Console::{GetConsoleOutputCP, SetConsoleOutputCP};
+
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
+
+fn usage<T>(utils: &UtilityMap<T>, name: &str) {
+    let display_list = utils.keys().copied().join(", ");
+    let width = cmp::min(textwrap::termwidth(), 100) - 8; // (opinion/heuristic) max 100 chars wide with 4 character side indentions
+    let indent_list = textwrap::indent(&textwrap::fill(&display_list, width), "    ");
+    let common_core_string = "
+Functions:
+      '<uutils>' [arguments...]
+
+";
+    let s = format!(
+        "{name} {VERSION} (multi-call binary)
+
+Usage: {name} [function [arguments...]]
+       {name} --list
+
+{common_core_string}Options:
+      --list    lists all defined functions, one per row
+
+Currently defined functions:
+
+{indent_list}"
+    );
+    if let Err(e) = writeln!(io::stdout(), "{s}")
+        && e.kind() != io::ErrorKind::BrokenPipe
+    {
+        let _ = writeln!(io::stderr(), "coreutils: {}", strip_errno(&e));
+        process::exit(1);
+    }
+}
+
+fn main() {
+    // NOTE: The stdlib checks the active CP and will call WriteFile directly if it's CP_UTF8.
+    //
+    // The good news is that this just so happens to not negatively affect ntfind,
+    // because through ulib it incorrectly checks the input CP instead of the output one.
+    // ntsort just hardcodes to CP_OEMCP, so it also isn't affected.
+    let _restore_cp = set_console_cp_utf8();
+
+    let utils = util_map();
+    // NOTE: We're not using uucore::args_os() here, because that performs globbing on Windows,
+    // which breaks various utilities, such as `find . -name "*.txt"`, where *.txt gets
+    // immediately expanded to whatever .txt files are in the current directory.
+    //let mut args = std::env::args_os();
+    let mut args = uucore::args_os();
+
+    let binary = binary_path(&mut args);
+    let binary_as_util = name(&binary).unwrap_or_else(|| {
+        usage(&utils, "<unknown binary name>");
+        process::exit(0);
+    });
+
+    // binary name ends with util name?
+    let is_coreutils = binary_as_util.ends_with("utils");
+    let matched_util = utils
+        .keys()
+        .filter(|&&u| binary_as_util.ends_with(u) && !is_coreutils)
+        .max_by_key(|u| u.len()); //Prefer stty more than tty. *utils is not ls
+
+    let util_name = if let Some(&util) = matched_util {
+        Some(OsString::from(util))
+    } else if is_coreutils || binary_as_util.ends_with("box") {
+        // todo: Remove support of "*box" from binary
+        uucore::set_utility_is_second_arg();
+        args.next()
+    } else {
+        not_found(&OsString::from(binary_as_util));
+    };
+
+    // 0th argument equals util name?
+    if let Some(util_os) = util_name {
+        let Some(util) = util_os.to_str() else {
+            not_found(&util_os)
+        };
+
+        match util {
+            "--list" => {
+                // we should fail with additional args https://github.com/uutils/coreutils/issues/11383#issuecomment-4082564058
+                if args.next().is_some() {
+                    let _ = writeln!(io::stderr(), "coreutils: invalid argument");
+                    process::exit(1);
+                }
+                let mut out = io::stdout().lock();
+                for util in utils.keys() {
+                    if let Err(e) = writeln!(out, "{util}")
+                        && e.kind() != io::ErrorKind::BrokenPipe
+                    {
+                        let _ = writeln!(io::stderr(), "coreutils: {}", strip_errno(&e));
+                        process::exit(1);
+                    }
+                }
+                process::exit(0);
+            }
+            "--version" | "-V" => {
+                if let Err(e) = writeln!(io::stdout(), "coreutils {VERSION} (multi-call binary)")
+                    && e.kind() != io::ErrorKind::BrokenPipe
+                {
+                    let _ = writeln!(io::stderr(), "coreutils: {}", strip_errno(&e));
+                    process::exit(1);
+                }
+                process::exit(0);
+            }
+            // Not a special command: fallthrough to calling a util
+            _ => {}
+        }
+
+        match utils.get(util) {
+            Some(&(uumain, _)) => {
+                // TODO: plug the deactivation of the translation
+                // and load the English strings directly at compilation time in the
+                // binary to avoid the load of the flt
+                // Could be something like:
+                // #[cfg(not(feature = "only_english"))]
+                setup_localization_or_exit(util);
+                process::exit(uumain(vec![util_os].into_iter().chain(args)));
+            }
+            None => {
+                if util == "--help" || util == "-h" {
+                    // see if they want help on a specific util
+                    if let Some(util_os) = args.next() {
+                        let Some(util) = util_os.to_str() else {
+                            not_found(&util_os)
+                        };
+
+                        match utils.get(util) {
+                            Some(&(uumain, _)) => {
+                                setup_localization_or_exit(util);
+                                let code = uumain(
+                                    vec![util_os, OsString::from("--help")]
+                                        .into_iter()
+                                        .chain(args),
+                                );
+                                io::stdout().flush().expect("could not flush stdout");
+                                process::exit(code);
+                            }
+                            None => not_found(&util_os),
+                        }
+                    }
+                    usage(&utils, binary_as_util);
+                    process::exit(0);
+                } else if util.starts_with('-') {
+                    // Argument looks like an option but wasn't recognized
+                    unrecognized_option(binary_as_util, &util_os);
+                } else {
+                    not_found(&util_os);
+                }
+            }
+        }
+    } else {
+        // GNU just fails, but busybox tests needs usage
+        // todo: patch the test suite instead
+        if binary_as_util.ends_with("box") {
+            usage(&utils, binary_as_util);
+        } else {
+            let _ = writeln!(io::stderr(), "coreutils: missing argument");
+        }
+        process::exit(1);
+    }
+}
+
+fn binary_path(args: &mut impl Iterator<Item = OsString>) -> std::path::PathBuf {
+    match args.next() {
+        Some(ref s) if !s.is_empty() => PathBuf::from(s),
+        // the fallback is valid only for hardlinks
+        _ => std::env::current_exe().unwrap(),
+    }
+}
+
+fn name(binary_path: &Path) -> Option<&str> {
+    binary_path.file_stem()?.to_str()
+}
+
+fn not_found(util: &OsStr) -> ! {
+    let _ = writeln!(
+        stderr(),
+        "coreutils: unknown program '{}'",
+        util.maybe_quote()
+    );
+    process::exit(1);
+}
+
+fn unrecognized_option(binary_name: &str, option: &OsStr) -> ! {
+    let _ = writeln!(
+        stderr(),
+        "{binary_name}: unrecognized option '{}'",
+        option.to_string_lossy()
+    );
+    process::exit(1);
+}
+
+fn setup_localization_or_exit(util_name: &str) {
+    let util_name = get_canonical_util_name(util_name);
+    locale::setup_localization(util_name).unwrap_or_else(|err| {
+        match err {
+            locale::LocalizationError::ParseResource {
+                error: err_msg,
+                snippet,
+            } => eprintln!("Localization parse error at {snippet}: {err_msg}"),
+            other => eprintln!("Could not init the localization system: {other}"),
+        }
+        process::exit(99)
+    });
+}
+
+fn get_canonical_util_name(util_name: &str) -> &str {
+    match util_name {
+        // uu_test aliases - '[' is an alias for test
+        "[" => "test",
+        "dir" => "ls",  // dir is an alias for ls
+        "vdir" => "ls", // vdir is an alias for ls
+
+        // Default case - return the util name as is
+        _ => util_name,
+    }
+}
+
+fn set_console_cp_utf8() -> RestoreConsoleCp {
+    let mut cp = unsafe { GetConsoleOutputCP() };
+    if cp == CP_UTF8 {
+        cp = 0;
+    }
+
+    if cp != 0 {
+        unsafe { SetConsoleOutputCP(CP_UTF8) };
+    }
+
+    RestoreConsoleCp(cp)
+}
+
+struct RestoreConsoleCp(u32);
+
+impl Drop for RestoreConsoleCp {
+    fn drop(&mut self) {
+        if self.0 != 0 {
+            unsafe { SetConsoleOutputCP(self.0) };
+        }
+    }
+}
+
+unsafe extern "C" {
+    unsafe fn ntsort_main(argc: i32, argv: *const *const u8) -> i32;
+}
+
+fn find_uumain<T: Args>(args: T) -> i32 {
+    if nthelpers::is_ntfind_invocation() {
+        ntfind::ntfind_main()
+    } else {
+        let strs: Vec<_> = findutils_collect_args(args);
+        let deps = findutils::find::StandardDependencies::new();
+        findutils::find::find_main(&strs, &deps)
+    }
+}
+
+fn find_uu_app() -> Command {
+    unreachable!()
+}
+
+fn xargs_uumain<T: Args>(args: T) -> i32 {
+    let strs: Vec<_> = findutils_collect_args(args);
+    findutils::xargs::xargs_main(&strs)
+}
+
+fn xargs_uu_app() -> Command {
+    unreachable!()
+}
+
+fn findutils_collect_args<T: Args>(args: T) -> Vec<&'static str> {
+    args.map(|s| {
+        let bytes = s.into_encoded_bytes();
+
+        // `String::from_utf8_lossy_owned` is an unstable feature. Here's a copy.
+        let string = if let Cow::Owned(string) = String::from_utf8_lossy(&bytes) {
+            string
+        } else {
+            unsafe { String::from_utf8_unchecked(bytes) }
+        };
+
+        // findutils expects `&[&str]` so we leak the `String` here. This is because
+        // we have a one-shot lifecycle. There's no point in doing memory management.
+        &*string.leak()
+    })
+    .collect()
+}
+
+fn sort_uumain<T: Args>(args: T) -> i32 {
+    let mut args: Vec<OsString> = args.collect();
+    if nthelpers::is_ntsort_invocation(&args) {
+        for arg in &mut args {
+            arg.push("\0");
+        }
+        let ptrs: Vec<_> = args.iter().map(|v| v.as_encoded_bytes().as_ptr()).collect();
+        unsafe { ntsort_main(ptrs.len() as i32, ptrs.as_ptr()) }
+    } else {
+        sort::uumain(args.into_iter())
+    }
+}
+
+fn sort_uu_app() -> Command {
+    sort::uu_app()
+}
