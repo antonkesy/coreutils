@@ -227,7 +227,7 @@ impl BufferStream {
             // That's not a problem. ulib is quite poorly written and we can outperform it with `ReadFile` anyway.
             // `(Rtl)IsTextUnicode` also only inspects the first 256 bytes, so `ReadFile` doesn't loose us anything.
             //
-            // Why does this matter? Because ulib contains two distinct and separat copies of the `RtlIsTextUnicode`
+            // Why does this matter? Because ulib contains two distinct and separate copies of the `RtlIsTextUnicode`
             // logic and their flags subtly differ. There's no explanation in the code why that is.
             //
             // NOTE that technically ulib also checks the file size and restricts mmap to <3GiB.

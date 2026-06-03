@@ -307,7 +307,7 @@ TCHAR *get_string(int id)
         return "Warning: the specified memory size is too low and will be adjusted "
                "to the minimum.\r\n";
     case MSG_SORT_MEM_GT_PAGE:
-        return "Warning: the specifed memory size is being reduced to the available "
+        return "Warning: the specified memory size is being reduced to the available "
                "paging memory.\r\n";
     case MSG_SORT_INPUT_FILE:
         return "<input file>\r\n";
@@ -1030,7 +1030,7 @@ void flush_output_buf()
 
 
 /* TEST_FOR_UNICODE - test if input is Unicode and determine various
- *                    record lenths.
+ *                    record lengths.
  */
 void test_for_unicode()
 {
@@ -1548,7 +1548,7 @@ unsigned find_two_pass_mem_size(__int64 internal_size)
 }
 
 
-/* STRATEGY - determine if we have sufficent memory for a one-pass sort,
+/* STRATEGY - determine if we have sufficient memory for a one-pass sort,
  *            or if we should optimize for a two-pass sort.
  */
 void strategy()
@@ -1924,7 +1924,7 @@ void write_recs()
 
         Run[N_runs].end_off = Out_offset + Out_buf_bytes;
 
-        /* if not on sector boundry, get on one
+        /* if not on sector boundary, get on one
          */
         sector_offset = Out_buf_bytes & (Temp_sector_size - 1);
         if (sector_offset)
